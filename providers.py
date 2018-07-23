@@ -34,18 +34,27 @@ class ExcelDataProvider(Provider):
         self._data = pd.read_excel(self.fileName, self.sheetName)
         print("File loaded")
 
-
-class AutoInferAdapterProvider(Provider):
+class FilterDataProvider(Provider):
     def __init__(self, provider, columns=None):
         super().__init__()
         self.provider = provider
         self.columns = columns
 
     def preComputeImp(self):
+        data = self.provider.getData()
+        self._data = data[self.columns] if self.columns else data
+
+
+class AutoInferAdapterProvider(Provider):
+    def __init__(self, provider, columns=None):
+        super().__init__()
+        self._helperProvider = FilterDataProvider( provider, columns)
+
+    def preComputeImp(self):
         self._data = self._adaptData()
 
     def _adaptData(self):
-        data = self.provider.getData()[self.columns] if self.columns else self.provider.getData()
+        data = self._helperProvider.getData()
         convertedData = []
         for col in data.columns.values:
             series = data[col]
