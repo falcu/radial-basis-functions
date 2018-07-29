@@ -11,7 +11,7 @@ class Provider(ABC):
 
     def preCompute(self):
         if not self._loaded:
-            self.preComputeImp()
+            self._data = self.preComputeImp()
             self._loaded = True
 
     @abstractmethod
@@ -23,6 +23,15 @@ class Provider(ABC):
         return self._data
 
 
+class NoActionProvider(Provider):
+    def __init__(self,data):
+        super().__init__()
+        self._noActionData = data
+
+    def preComputeImp(self):
+        return self._noActionData
+
+
 class ExcelDataProvider(Provider):
     def __init__(self, fileName, sheetName):
         super().__init__()
@@ -31,30 +40,32 @@ class ExcelDataProvider(Provider):
 
     def preComputeImp(self):
         print("Loading {}".format(self.fileName))
-        self._data = pd.read_excel(self.fileName, self.sheetName)
+        return pd.read_excel(self.fileName, self.sheetName)
         print("File loaded")
 
 class FilterDataProvider(Provider):
-    def __init__(self, provider, columns=None):
+    def __init__(self, provider, columns=None,rows=None):
         super().__init__()
         self.provider = provider
         self.columns = columns
+        self.rows = rows
 
     def preComputeImp(self):
         data = self.provider.getData()
-        self._data = data[self.columns] if self.columns else data
+        data = data[self.columns] if self.columns else data
+        return data.loc[self.rows] if self.rows else data
 
 
 class AutoInferAdapterProvider(Provider):
-    def __init__(self, provider, columns=None):
+    def __init__(self, provider):
         super().__init__()
-        self._helperProvider = FilterDataProvider( provider, columns)
+        self.provider = provider
 
     def preComputeImp(self):
-        self._data = self._adaptData()
+        return self._adaptData()
 
     def _adaptData(self):
-        data = self._helperProvider.getData()
+        data = self.provider.getData()
         convertedData = []
         for col in data.columns.values:
             series = data[col]
@@ -70,27 +81,68 @@ class AutoInferAdapterProvider(Provider):
         else:
             try:
                 [float(v) for v in rawData]
-                return NumericNormalizedAdapter()
+                allValues = list(set(rawData))
+                allValues.sort()
+                if allValues == [0,1]:
+                    return NoConversionAdapter()
+                else:
+                    return NumericNormalizedAdapter()
             except:
                 return QualitativeToBinary()
 
 
 class RawDataProvider(Provider):
-    def __init__(self, provider):
+    def __init__(self, provider ):
         super().__init__()
         self.provider = provider
 
     def preComputeImp(self):
-        self._data = self.provider.getData().values
+        return self.provider.getData().values
+
+
+class ShuffleProvider(Provider):
+    def __init__(self, provider ):
+        super().__init__()
+        self.provider = provider
+
+    def preComputeImp(self):
+        return self.provider.getData().sample(frac=1)\
+                            .reset_index(drop=True)
+
+
+class SlidesProvider(Provider):
+    def __init__(self, provider, slidesPercentage=[1.0]):
+        super().__init__()
+        if not sum(slidesPercentage)==1.0:
+            raise Exception("Slides percentage should add 1.0")
+        self.provider = provider
+        self._slidesPercentage = slidesPercentage
+
+
+    def preComputeImp(self):
+        data = self.provider.getData()
+        inputSize = data.shape[0]
+        slides = []
+        fromSlidePer = 0.0
+        for aSlidePercentage in self._slidesPercentage:
+            toSlidePer = fromSlidePer + aSlidePercentage
+            fromSlide = int(fromSlidePer*inputSize)
+            toSlide = int(toSlidePer*inputSize)
+            slides.append( NoActionProvider( data[fromSlide:toSlide] ) )
+            fromSlidePer = toSlidePer
+
+        return slides
+
 
 # Adapters
 
-class DataAdapter:
+class ManualDataAdapterProvider(Provider):
     def __init__(self, provider, adapterMapping):
+        super().__init__()
         self.provider = provider
         self.adapterMapping = adapterMapping
 
-    def adapt(self):
+    def preComputeImp(self):
         def _adapt(file, col):
             adapter = self.adapterMapping.get(col, EmptyAdapter())
             return adapter.adapt(file[col])
@@ -99,9 +151,6 @@ class DataAdapter:
         convertedData = [_adapt(file, col) for col in file.columns.values]
 
         return pd.concat(convertedData, axis=1)
-
-
-
 
 
 class VectorAdapter(ABC):
@@ -142,6 +191,13 @@ class NumericNormalizedAdapter(VectorAdapter):
 
         return pd.DataFrame(normalized)
 
+class ApplyFuncAdapter(VectorAdapter):
+    def __init__(self, func=None):
+        self._func = func or (lambda v : v)
+
+    def adapt(self, series):
+        return series.apply(self._func)
+
 #Test methods
 
 def testFile():
@@ -149,25 +205,3 @@ def testFile():
     provider = ExcelDataProvider(file, 'Raw data')
     return provider.getData()
 
-def testFilteredFile():
-    file = r'D:\Guido\Master Finanzas\2018\Primer Trimestre\Metodos No Param\Base_Clientes Alemanes.xlsx'
-    provider = ExcelDataProvider(file, 'Raw data')
-    columns = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,17, 18, 19, 20]
-    return FilteredProvider(provider,columns).getData()
-
-
-def testAdapted():
-    file = r'D:\Guido\Master Finanzas\2018\Primer Trimestre\Metodos No Param\Base_Clientes Alemanes.xlsx'
-    provider = ExcelDataProvider(file, 'Raw data')
-    mapping = {1: QualitativeToBinary(), 2: NumericNormalizedAdapter(), 3: QualitativeToBinary(),
-               4: QualitativeToBinary(), 5: NumericNormalizedAdapter(),
-               6: QualitativeToBinary()}
-    adapter = DataAdapter(provider, mapping)
-    return adapter
-
-def testInferedAdapted():
-    file = r'D:\Guido\Master Finanzas\2018\Primer Trimestre\Metodos No Param\Base_Clientes Alemanes.xlsx'
-    provider = ExcelDataProvider(file, 'Raw data')
-    columns = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-    filteredProvider = FilteredProvider(provider, columns)
-    return AutoInferAdapterProvider(filteredProvider)
