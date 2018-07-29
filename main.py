@@ -39,15 +39,16 @@ def main():
     shouldPlot = args['plot']
     minComb = args['min_comb']
     interComb = args['iter_conmb']
-    _, inputDimensions, _, _ = _getTestFileInfo(fileName)
-    if minComb>len(inputDimensions):
-        raise ArgumentTypeError("Max Min combinations can be {}".format(inputDimensions))
+
 
     if programOption == 'kmeans':
         kmeans(nOfClusters, fileName, plot=shouldPlot)
     elif programOption == 'error':
         computeError(nOfClusters, fileName, slides=slides)
     elif programOption == 'find_dim':
+        _, inputDimensions, _, _ = _getTestFileInfo(fileName)
+        if minComb > len(inputDimensions):
+            raise ArgumentTypeError("Max Min combinations can be {}".format(inputDimensions))
         findRelevantDimensions(nOfClusters,fileName, iterationsPerCombination=interComb, minCombination=minComb)
 
 def provideCreditData(fileProvider,inputColumns,outputColumn,slidesPercentage=[1.0], outputFunc=None):
