@@ -18,6 +18,14 @@ def main():
             raise ArgumentTypeError("Valid options are {}".format(options))
         return x
 
+    def str2bool(v):
+        if v.lower() in ('yes', 'true', 't', 'y', '1'):
+            return True
+        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+            return False
+        else:
+            raise ArgumentTypeError('Boolean value expected.')
+
     kmeansOptions = lambda x : optionStr(x,['kmeans','error','find_dim'])
     fileNameOptions = lambda x : optionStr(x,['credit','test2dim'])
 
@@ -26,7 +34,7 @@ def main():
     parser.add_argument('-fo', '--file_option', help='File Name option: credit or test2dim', required=True, type=fileNameOptions)
     parser.add_argument('-c', '--clusters', help='Number of clusters', required=False, type=int, default=5)
     parser.add_argument('-is', '--insample', help='In Sample proportion', required=False, type=betweenZeroAndOneFloat, default=0.5)
-    parser.add_argument('-p', '--plot', help='If it should plot. Makes sense for 2 Dim input', required=False, type=bool,default=False)
+    parser.add_argument('-p', '--plot', help='If it should plot. Makes sense for 2 Dim input', required=False, type=str2bool,default='False')
     parser.add_argument('-mc', '--min_comb', help='Min combination of columns. Relevant for option find_dim', required=False,
                         type=int, default=5)
     parser.add_argument('-ic', '--iter_conmb', help='Number of iterations per combination. Relevant for option find_dim',
@@ -122,7 +130,7 @@ def computeError(nOfClusters=5, fileName='credit', slides=None):
     rad = RadialBasisFunctions(outputProv.getData()[0], kMeans)
     rad.computeWeights()
     misses, total = rad.error(inputProv.getData()[1], outputProv.getData()[1])
-    print("{} % error out of sample".format(100*misses/total))
+    print("{} % error in out of sample".format(100*misses/total))
 
 def findRelevantDimensions(nOfClusters=5, fileName='credit', iterationsPerCombination=10, minCombination=5, slides=None):
     fileProvider, inputColumns, outputColumn, outputFunc = _getTestFileInfo(fileName)
